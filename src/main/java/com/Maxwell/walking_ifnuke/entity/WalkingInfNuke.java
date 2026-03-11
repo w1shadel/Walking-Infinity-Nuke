@@ -8,7 +8,6 @@ import com.buuz135.industrial.utils.explosion.ExplosionTickHandler;
 import com.buuz135.industrial.utils.explosion.ProcessExplosion;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -18,6 +17,7 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -37,12 +37,10 @@ import net.minecraftforge.network.NetworkHooks;
 import javax.annotation.Nullable;
 
 public class WalkingInfNuke extends PathfinderMob {
-
     private static final EntityDataAccessor<Integer> RADIUS = SynchedEntityData.defineId(WalkingInfNuke.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> EXPLODING = SynchedEntityData.defineId(WalkingInfNuke.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> ARMED = SynchedEntityData.defineId(WalkingInfNuke.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> TICKS = SynchedEntityData.defineId(WalkingInfNuke.class, EntityDataSerializers.INT);
-
     @Nullable
     private LivingEntity placedBy;
     private ItemStack original;
@@ -91,7 +89,7 @@ public class WalkingInfNuke extends PathfinderMob {
     @Override
     public void thunderHit(ServerLevel level, LightningBolt lightning) {
         super.thunderHit(level, lightning);
-        if (!this.isExploding()) {
+        if (!this.level().isClientSide && !this.isExploding()) {
             this.setArmed(true);
             this.setExploding(true);
             this.setHealth(this.getMaxHealth());
@@ -103,7 +101,7 @@ public class WalkingInfNuke extends PathfinderMob {
         super.tick();
         if (!this.level().isClientSide) {
             ServerLevel serverLevel = (ServerLevel) this.level();
-            if (serverLevel.isThundering()) {
+            if (!this.isExploding() && serverLevel.isThundering()) {
                 if (serverLevel.canSeeSky(this.blockPosition().above())) {
                     if (this.random.nextFloat() < 0.005F) {
                         LightningBolt lightning = EntityType.LIGHTNING_BOLT.create(serverLevel);
@@ -114,35 +112,39 @@ public class WalkingInfNuke extends PathfinderMob {
                     }
                 }
             }
+            if (this.isExploding()) {
+                if (this.getTarget() == null || !this.getTarget().isAlive()) {
+                    Player nearestPlayer = this.level().getNearestPlayer(this, 64.0D);
+                    if (nearestPlayer != null) {
+                        this.setTarget(nearestPlayer);
+                    }
+                }
+                if (this.explosionHelper == null) {
+                    String placerName = (placedBy != null && placedBy.isAlive())
+                            ? placedBy.getDisplayName().getString() : "";
+                    this.explosionHelper = new ProcessExplosion(
+                            this.blockPosition(),
+                            getRadius(),
+                            serverLevel,
+                            39,
+                            placerName
+                    );
+                    ExplosionTickHandler.processExplosionList.add(this.explosionHelper);
+                }
+                setTicksExploding(this.getTicksExploding() + 1);
+                this.updateInWaterStateAndDoFluidPushing();
+            }
+            if (explosionHelper != null && explosionHelper.isDead) {
+                this.discard();
+            }
         }
-        if (!this.level().isClientSide && this.isExploding()) {
-            if (this.getTarget() == null || !this.getTarget().isAlive()) {
-                Player nearestPlayer = this.level().getNearestPlayer(this, 64.0D);
-                if (nearestPlayer != null) {
-                    this.setTarget(nearestPlayer);
+        if (this.level().isClientSide) {
+            if (this.getEntityData().get(EXPLODING)) {
+                tickClient();
+                if (this.random.nextFloat() < 0.3f) {
+                    this.level().addParticle(ParticleTypes.SMOKE, this.getX(), this.getY() + 1.1D, this.getZ(), 0.0D, 0.0D, 0.0D);
                 }
             }
-        }
-        if (exploding) {
-            if (level() instanceof ServerLevel && explosionHelper == null) {
-                explosionHelper = new ProcessExplosion(this.blockPosition(), getRadius(), (ServerLevel) this.level(), 39, placedBy != null ? placedBy.getDisplayName().getString() : "");
-                ExplosionTickHandler.processExplosionList.add(explosionHelper);
-            }
-            setTicksExploding(this.getTicksExploding() + 1);
-            this.updateInWaterStateAndDoFluidPushing();
-        }
-        if (this.level().isClientSide && this.getEntityData().get(EXPLODING)) {
-            if (this.level().isClientSide) {
-                this.level().addParticle(ParticleTypes.SMOKE, this.getX(), this.getY() + 1.1D, this.getZ(), 0.0D, 0.0D, 0.0D);
-                this.level().addParticle(new BlockParticleOption(ParticleTypes.BLOCK, this.level().getBlockState(this.blockPosition().below())), this.getX() + this.level().getRandom().nextDouble() - 0.5, this.getY(), this.getZ() + this.level().getRandom().nextDouble() - 0.5, 0.0D, 0.0D, 0.0D);
-            }
-        }
-        if (explosionHelper != null && explosionHelper.isDead) {
-            this.remove(RemovalReason.KILLED);
-            this.onClientRemoval();
-        }
-        if (level().isClientSide) {
-            tickClient();
         }
     }
 
@@ -181,13 +183,28 @@ public class WalkingInfNuke extends PathfinderMob {
     @OnlyIn(Dist.CLIENT)
     private void tickClient() {
         if (chargingSound == null && this.getEntityData().get(EXPLODING)) {
-            Minecraft.getInstance().getSoundManager().play(chargingSound = new TickeableSound(this.level(), this.blockPosition(), ModuleTool.NUKE_CHARGING.get(), getRadius(), 10, this.level().random));
+            chargingSound = new TickeableSound(
+                    this.level(),
+                    this.blockPosition(),
+                    ModuleTool.NUKE_CHARGING.get(),
+                    getRadius(),
+                    10,
+                    RandomSource.create()
+            );
+            Minecraft.getInstance().getSoundManager().play(chargingSound);
         }
         if (chargingSound != null) {
             chargingSound.setDistance(getRadius());
             chargingSound.increase();
             if (!Minecraft.getInstance().getSoundManager().isActive(chargingSound) && explodingSound == null) {
-                explodingSound = new TickeableSound(this.level(), this.blockPosition(), ModuleTool.NUKE_EXPLOSION.get(), getRadius(), 10, this.level().random);
+                explodingSound = new TickeableSound(
+                        this.level(),
+                        this.blockPosition(),
+                        ModuleTool.NUKE_EXPLOSION.get(),
+                        getRadius(),
+                        10,
+                        RandomSource.create()
+                );
                 explodingSound.setPitch(1);
                 Minecraft.getInstance().getSoundManager().play(explodingSound);
             }
@@ -280,7 +297,16 @@ public class WalkingInfNuke extends PathfinderMob {
 
     @OnlyIn(Dist.CLIENT)
     private void arm() {
-        Minecraft.getInstance().getSoundManager().play(new SimpleSoundInstance(ModuleTool.NUKE_ARMING.get(), SoundSource.BLOCKS, 1, 1, Minecraft.getInstance().level.random, this.blockPosition()));
+        Minecraft.getInstance().getSoundManager().play(
+                new SimpleSoundInstance(
+                        ModuleTool.NUKE_ARMING.get(),
+                        SoundSource.BLOCKS,
+                        1.0F,
+                        1.0F,
+                        RandomSource.create(),
+                        this.blockPosition()
+                )
+        );
     }
 
     @Override

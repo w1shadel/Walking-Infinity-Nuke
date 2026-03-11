@@ -33,7 +33,6 @@ public class WalkingInfNukeModelArmed extends EntityModel<WalkingInfNuke> {
     public static LayerDefinition createBodyLayer(CubeDeformation size) {
         MeshDefinition meshDefinition = new MeshDefinition();
         PartDefinition partDefinition = meshDefinition.getRoot();
-        // --- 既存パーツ ---
         partDefinition.addOrReplaceChild("top", CubeListBuilder.create()
                         .texOffs(60, 53).addBox(10.0f, -10.4f, -11.0f, -4.0f, 3.0f, 4.0f, size)
                         .texOffs(48, 24).addBox(6.0f, -12.4f, -11.0f, 4.0f, 1.0f, 4.0f, size)
@@ -47,7 +46,6 @@ public class WalkingInfNukeModelArmed extends EntityModel<WalkingInfNuke> {
                         .texOffs(50, 35).addBox(5.0f, -7.9f, -9.5f, 6.0f, 1.0f, 1.0f, size)
                         .texOffs(52, 29).addBox(6.5f, -8.9f, -10.5f, 3.0f, 3.0f, 3.0f, size),
                 PartPose.offsetAndRotation(-8.0f, 17.4f, 8.0f, 0.0f, 0.0f, 0.0f));
-        // --- Left Leg ---
         PartDefinition upperLegLeft = partDefinition.addOrReplaceChild("upper_leg_left", CubeListBuilder.create()
                         .texOffs(49, 5).addBox(-1.0F, 0.0F, -1.5F, 2.0F, 8.0F, 3.0F, size),
                 PartPose.offset(4.0F, 2.0F, -1.0F));
@@ -57,7 +55,6 @@ public class WalkingInfNukeModelArmed extends EntityModel<WalkingInfNuke> {
                         .texOffs(56, 43).addBox(-1.0F, 10.0F, 2.0F, 2.0F, 4.0F, 2.0f, size)
                         .texOffs(0, 42).addBox(-1.0F, 8.0F, -4.0F, 2.0F, 2.0F, 8.0f, size),
                 PartPose.offset(0.0F, 8.0F, 0.0F));
-        // --- Right Leg ---
         PartDefinition upperLegRight = partDefinition.addOrReplaceChild("upper_leg_right", CubeListBuilder.create()
                         .texOffs(54, 5).addBox(-1.0F, 0.0F, -1.5F, 2.0F, 8.0F, 3.0F, size),
                 PartPose.offset(-4.0F, 2.0F, -1.0F));
@@ -67,7 +64,6 @@ public class WalkingInfNukeModelArmed extends EntityModel<WalkingInfNuke> {
                         .texOffs(0, 42).addBox(-1.0F, 8.0F, -4.0F, 2.0F, 2.0F, 8.0f, size)
                         .texOffs(56, 43).addBox(-1.0F, 10.0F, 2.0F, 2.0F, 4.0F, 2.0f, size),
                 PartPose.offset(0.0F, 8.0F, 0.0F));
-        // --- Bone ---
         partDefinition.addOrReplaceChild("bone", CubeListBuilder.create()
                         .texOffs(42, 0).addBox(-5.0f, -26.0f, -1.5f, 10.0f, 4.0f, 1.0f, size),
                 PartPose.offsetAndRotation(0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f));
@@ -76,10 +72,8 @@ public class WalkingInfNukeModelArmed extends EntityModel<WalkingInfNuke> {
 
     @Override
     public void setupAnim(WalkingInfNuke entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
-        // 歩行
         this.upper_leg_left.xRot = Mth.cos(limbSwing * 0.6662F) * 1.0F * limbSwingAmount;
         this.upper_leg_right.xRot = Mth.cos(limbSwing * 0.6662F + (float) Math.PI) * 1.0F * limbSwingAmount;
-        // 膝
         this.lower_leg_left.xRot = -Math.abs(Mth.sin(limbSwing * 0.6662F) * 0.8F * limbSwingAmount);
         this.lower_leg_right.xRot = -Math.abs(Mth.sin(limbSwing * 0.6662F + (float) Math.PI) * 0.8F * limbSwingAmount);
         float wobble = Mth.cos(limbSwing * 0.6662F) * 0.1F * limbSwingAmount;
